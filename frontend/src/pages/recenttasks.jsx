@@ -34,7 +34,7 @@ const RecentTasks = () => {
   const fetchEmployees = async () => {
     setEmployeesLoading(true);
     try {
-      const response = await axios.get('http://localhost:3002/api/v1/employees');
+      const response = await axios.get('http://145.223.96.50:3002/api/v1/employees');
       if (Array.isArray(response.data.data)) {
         setEmployees(response.data.data);
       } else {
@@ -55,7 +55,7 @@ const RecentTasks = () => {
   const fetchTasks = async () => {
     setTasksLoading(true);
     try {
-      const response = await axios.get('http://localhost:3002/api/v1/tasks');
+      const response = await axios.get('http://145.223.96.50:3002/api/v1/tasks');
       if (response.data && Array.isArray(response.data.data)) {
         const sortedTasks = response.data.data.sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
@@ -77,7 +77,7 @@ const RecentTasks = () => {
 
               if (endpointMap[task.type]) {
                 const formResponse = await axios.get(
-                  `http://localhost:3002/api/v1/${endpointMap[task.type]}/by-task/${task.taskId}`
+                  `http://145.223.96.50:3002/api/v1/${endpointMap[task.type]}/by-task/${task.taskId}`
                 );
                 formData = formResponse.data.data ? formResponse.data.data : formResponse.data;
               }
@@ -135,7 +135,7 @@ const RecentTasks = () => {
   // Handle task completion
   const handleCompleteTask = async (taskId) => {
     try {
-      await axios.put(`http://localhost:3002/api/v1/tasks/${taskId}/complete`);
+      await axios.put(`http://145.223.96.50:3002/api/v1/tasks/${taskId}/complete`);
       fetchTasks();
     } catch (error) {
       console.error('Error completing task:', error);
@@ -237,7 +237,7 @@ const RecentTasks = () => {
   
       // إرسال الطلب
       const response = await axios.put(
-        `http://localhost:3002/api/v1/${endpoint}/${editFormId}`,
+        `http://145.223.96.50:3002/api/v1/${endpoint}/${editFormId}`,
         updateData
       );
   
@@ -272,7 +272,7 @@ const RecentTasks = () => {
     }
 
     try {
-      await axios.put(`http://localhost:3002/api/v1/tasks/${selectedTask.id}`, {
+      await axios.put(`http://145.223.96.50:3002/api/v1/tasks/${selectedTask.id}`, {
         employeeId: selectedEmployeeId,
       });
       setShowReassignTask(false);
@@ -315,7 +315,7 @@ const RecentTasks = () => {
       }
 
       const formResponse = await axios.get(
-        `http://localhost:3002/api/v1/${endpointMap[task.type]}/by-task/${taskId}`
+        `http://145.223.96.50:3002/api/v1/${endpointMap[task.type]}/by-task/${taskId}`
       );
 
       let formData = formResponse.data.data ? formResponse.data.data : formResponse.data;
