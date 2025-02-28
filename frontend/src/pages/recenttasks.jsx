@@ -34,7 +34,7 @@ const RecentTasks = () => {
   const fetchEmployees = async () => {
     setEmployeesLoading(true);
     try {
-      const response = await axios.get('http://145.223.96.50:3002/api/v1/employees');
+      const response = await axios.get('http://localhost:3002/api/v1/employees');
       if (Array.isArray(response.data.data)) {
         setEmployees(response.data.data);
       } else {
@@ -55,7 +55,7 @@ const RecentTasks = () => {
   const fetchTasks = async () => {
     setTasksLoading(true);
     try {
-      const response = await axios.get('http://145.223.96.50:3002/api/v1/tasks');
+      const response = await axios.get('http://localhost:3002/api/v1/tasks');
       if (response.data && Array.isArray(response.data.data)) {
         const sortedTasks = response.data.data.sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
@@ -77,7 +77,7 @@ const RecentTasks = () => {
 
               if (endpointMap[task.type]) {
                 const formResponse = await axios.get(
-                  `http://145.223.96.50:3002/api/v1/${endpointMap[task.type]}/by-task/${task.taskId}`
+                  `http://localhost:3002/api/v1/${endpointMap[task.type]}/by-task/${task.taskId}`
                 );
                 formData = formResponse.data.data ? formResponse.data.data : formResponse.data;
               }
@@ -85,7 +85,6 @@ const RecentTasks = () => {
               console.error('Error fetching form data for Task ID:', task.id, error);
             }
 
-            let duration = null;
             let formCreationDate = null;
             let formId = null;
             if (formData) {
@@ -98,11 +97,6 @@ const RecentTasks = () => {
                 formCreationDate = formData.createdAt;
                 formId = formData.id;
               }
-            }
-            if (task.createdAt && formCreationDate) {
-              const taskCreatedAt = new Date(task.createdAt);
-              const formCreatedAt = new Date(formCreationDate);
-              duration = Math.abs((formCreatedAt - taskCreatedAt) / 1000 / 60).toFixed(2) + ' دقائق';
             }
 
             return {
@@ -122,7 +116,6 @@ const RecentTasks = () => {
                   : task.type,
               formData,
               formCreationDate,
-              duration,
               formId,
             };
           })
@@ -142,7 +135,7 @@ const RecentTasks = () => {
   // Handle task completion
   const handleCompleteTask = async (taskId) => {
     try {
-      await axios.put(`http://145.223.96.50:3002/api/v1/tasks/${taskId}/complete`);
+      await axios.put(`http://localhost:3002/api/v1/tasks/${taskId}/complete`);
       fetchTasks();
     } catch (error) {
       console.error('Error completing task:', error);
@@ -244,7 +237,7 @@ const RecentTasks = () => {
   
       // إرسال الطلب
       const response = await axios.put(
-        `http://145.223.96.50:3002/api/v1/${endpoint}/${editFormId}`,
+        `http://localhost:3002/api/v1/${endpoint}/${editFormId}`,
         updateData
       );
   
@@ -279,7 +272,7 @@ const RecentTasks = () => {
     }
 
     try {
-      await axios.put(`http://145.223.96.50:3002/api/v1/tasks/${selectedTask.id}`, {
+      await axios.put(`http://localhost:3002/api/v1/tasks/${selectedTask.id}`, {
         employeeId: selectedEmployeeId,
       });
       setShowReassignTask(false);
@@ -322,7 +315,7 @@ const RecentTasks = () => {
       }
 
       const formResponse = await axios.get(
-        `http://145.223.96.50:3002/api/v1/${endpointMap[task.type]}/by-task/${taskId}`
+        `http://localhost:3002/api/v1/${endpointMap[task.type]}/by-task/${taskId}`
       );
 
       let formData = formResponse.data.data ? formResponse.data.data : formResponse.data;
@@ -347,8 +340,6 @@ const RecentTasks = () => {
   };
 
   // Handle update redirect - modified to pass formId along with taskId
-  // ... existing code ...
-
   const handleUpdateRedirect = async (task) => {
     try {
       // تعيين المسارات لجميع الأنواع المحتملة بما فيها الأسماء العربية
@@ -391,7 +382,6 @@ const RecentTasks = () => {
     }
   };
 
-// ... existing code ...
   // Helper function to format date
   const formatDate = (dateString) => {
     if (!dateString) return 'غير متوفر';
@@ -636,9 +626,6 @@ const RecentTasks = () => {
                 <th className="py-3 px-6 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   تاريخ الإنشاء
                 </th>
-                <th className="py-3 px-6 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  وقت الإنجاز
-                </th>
                 <th className="py-3 px-6 text-right text-xs font-medium">
                   الإجراءات
                 </th>
@@ -660,7 +647,6 @@ const RecentTasks = () => {
                     </span>
                   </td>
                   <td className="py-4 px-6 text-sm text-gray-500">{formatDate(task.createdAt)}</td>
-                  <td className="py-4 px-6 text-sm text-gray-500">{task.duration || 'غير متوفر'}</td>
                   <td className="py-4 px-6 text-sm font-medium">
                     <div className="flex space-x-2 space-x-reverse">
                       {task.status !== 'COMPLETED' && (
