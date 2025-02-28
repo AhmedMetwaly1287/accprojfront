@@ -1,120 +1,180 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useAuth } from "../context/authContext";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const OtherForm = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Extract taskId, employeeId, and companyId from the location state
-  const { taskId, employeeId, companyId } = location.state || {};
+  const taskId = location.state?.taskId;
+  const companyId = location.state?.companyId;
+  const isUpdate = location.state?.isUpdate || false;
 
-  // State management for form data
   const [formData, setFormData] = useState({
+    id: "",
+    empId: user?.id || "",
+    compId: companyId || "",
+    taskId: taskId || "",
     type: "",
-    CreationDate: new Date().toISOString().split("T")[0], // Default to today's date in YYYY-MM-DD format
+    CreationDate: new Date().toISOString().split("T")[0],
   });
 
-  // State for loading and error handling
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [status, setStatus] = useState({ type: "", message: "" });
 
-  // Handle form submission
+  useEffect(() => {
+    if (isUpdate && taskId) {
+      const fetchFormData = async () => {
+        try {
+          // تحويل taskId إلى رقم إذا كان نصاً
+          const numericTaskId = parseInt(taskId, 10);
+          
+          const response = await axios.get(
+            `http://145.223.96.50:3002/api/v1/other/by-task/${numericTaskId}`
+          );
+          const data = response.data.data ? response.data.data : response.data;
+          
+          const recordId = data.id || data._id;
+          
+          setFormData({
+            ...data,
+            id: recordId,
+            empId: user?.id || "",
+            compId: parseInt(companyId, 10) || "",
+            taskId: numericTaskId,
+            CreationDate: data.CreationDate ? data.CreationDate.split('T')[0] : "",
+          });
+        } catch (error) {
+          console.error("Error fetching form data:", error);
+          setStatus({ type: "error", message: "فشل في جلب بيانات النموذج" });
+        }
+      };
+  
+      fetchFormData();
+    }
+  }, [isUpdate, taskId, user?.id, companyId]);
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Basic validation for required fields
-    if (!formData.type) {
-      setError("يرجى إدخال نوع العملية");
-      return;
-    }
-
-    // Set loading state to true
-    setLoading(true);
-    setError("");
+    setStatus({ type: "", message: "" });
 
     try {
-      // Convert CreationDate to ISO-8601 format
-      const isoDate = new Date(formData.CreationDate).toISOString();
+      const submissionData = {
+        ...formData,
+        CreationDate: formData.CreationDate
+          ? new Date(formData.CreationDate).toISOString()
+          : null,
+      };
 
-      // Send data to the backend to create a new "Other" record
-      const response = await axios.post("http://145.223.96.50:3002/api/v1/other", {
-        type: formData.type,
-        CreationDate: isoDate, // Use the ISO-8601 formatted date
-        empId: employeeId,     // Automatically pass empId
-        compId: companyId,     // Automatically pass compId
-        taskId: taskId,        // Automatically pass taskId
-      });
+      if (isUpdate) {
+        if (!formData.id) {
+          setStatus({ 
+            type: "error", 
+            message: "معرف السجل مفقود للتحديث" 
+          });
+          return;
+        }
 
-      // Check if the response contains valid data
-      if (response.data) {
-        // Redirect to the dashboard or show a success message
-        navigate("/dashboard", {
-          state: { message: "تم حفظ البيانات بنجاح" },
-        });
+        await axios.put(
+          `http://145.223.96.50:3002/api/v1/other/${formData.id}`,
+          submissionData
+        );
+        setStatus({ type: "success", message: "تم تحديث البيانات بنجاح! (مكتمل)" });
+      } else {
+        await axios.post("http://145.223.96.50:3002/api/v1/other", submissionData);
+        setStatus({ type: "success", message: "تم تسجيل البيانات بنجاح! (مكتمل)" });
       }
+
+      setTimeout(() => navigate("/employee-dashboard"), 1500);
     } catch (error) {
-      // Handle errors gracefully
-      setError("فشل حفظ البيانات. حاول مرة أخرى لاحقًا.");
-    } finally {
-      // Reset loading state
-      setLoading(false);
+      console.error("Form submission error:", error);
+      setStatus({
+        type: "error",
+        message:
+          error.response?.data?.message || "فشل إرسال النموذج. يرجى المحاولة مرة أخرى.",
+      });
     }
   };
 
-  // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData({
+      ...formData,
+      [name]: value,
+    });
+  };
+
+  const resetForm = () => {
+    setFormData({
+      id: "",
+      empId: user?.id || "",
+      compId: companyId || "",
+      taskId: taskId || "",
+      type: "",
+      CreationDate: new Date().toISOString().split("T")[0],
+    });
+    setStatus({ type: "", message: "" });
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">نموذج آخر</h1>
-
-      {/* Display error messages */}
-      {error && <p className="text-red-600 mb-4">{error}</p>}
-
-      {/* Form for creating a new "Other" record */}
+    <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-lg">
+      <h2 className="text-2xl font-bold mb-2">نموذج آخر</h2>
+      {status.message && (
+        <div
+          className={`mb-4 p-4 rounded ${
+            status.type === "error"
+              ? "bg-red-100 text-red-700"
+              : "bg-green-100 text-green-700"
+          }`}
+        >
+          {status.message}
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Type field */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">
-            نوع العملية
-          </label>
+          <label className="block text-sm font-medium mb-1">نوع العملية</label>
           <input
             type="text"
             name="type"
             value={formData.type}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
             required
           />
         </div>
 
-        {/* CreationDate field */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">
-            تاريخ الإنشاء
-          </label>
+          <label className="block text-sm font-medium mb-1">تاريخ الإنشاء</label>
           <input
             type="date"
             name="CreationDate"
             value={formData.CreationDate}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
             required
           />
         </div>
 
-        {/* Submit button */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-        >
-          {loading ? "جاري الحفظ..." : "حفظ"}
-        </button>
+        <input type="hidden" name="id" value={formData.id} />
+        <input type="hidden" name="empId" value={formData.empId} />
+        <input type="hidden" name="compId" value={formData.compId} />
+        <input type="hidden" name="taskId" value={formData.taskId} />
+
+        <div className="flex justify-end space-x-4">
+          <button
+            type="button"
+            onClick={resetForm}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 focus:outline-none"
+          >
+            إعادة تعيين
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none"
+          >
+            {isUpdate ? "تحديث" : "إرسال"}
+          </button>
+        </div>
       </form>
     </div>
   );

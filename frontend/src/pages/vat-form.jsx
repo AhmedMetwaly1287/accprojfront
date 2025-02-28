@@ -1,25 +1,21 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { useAuth } from "../context/authContext"; // Import your authentication context
+import { useAuth } from "../context/authContext";
 import { useNavigate, useLocation } from "react-router-dom";
 
 const VATForm = () => {
-  const { user } = useAuth(); // Get logged-in user data
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation(); // Get location state for companyId
+  const location = useLocation();
 
-  // Log the location state to debug
-  useEffect(() => {
-    console.log("Location state:", location.state);
-  }, [location.state]);
-
-  const employeeId = user?.id || ""; // Get empId from logged-in user
-  const companyId = location.state?.companyId; // Retrieve companyId from location.state
   const taskId = location.state?.taskId;
+  const companyId = location.state?.companyId;
+  const isUpdate = location.state?.isUpdate || false;
 
   const [formData, setFormData] = useState({
-    empId: employeeId, // Add empId from logged-in user
-    compId: companyId || "", // Add companyId if available
+    id: "",
+    empId: user?.id || "",
+    compId: companyId || "",
     taskId: taskId || "",
     email: "",
     pass: "",
@@ -30,51 +26,74 @@ const VATForm = () => {
 
   const [status, setStatus] = useState({ type: "", message: "" });
 
+  useEffect(() => {
+    if (isUpdate && taskId) {
+      const fetchFormData = async () => {
+        try {
+          const response = await axios.get(
+            `http://145.223.96.50:3002/api/v1/vat/by-task/${taskId}`
+          );
+          const data = response.data.data ? response.data.data : response.data;
+          
+          const recordId = data.id || data._id;
+          
+          setFormData({
+            ...data,
+            id: recordId,
+            empId: user?.id || "",
+            compId: companyId || "",
+            taskId: taskId || "",
+            CreationDate: data.CreationDate ? data.CreationDate.split('T')[0] : "",
+            expiryDate: data.expiryDate ? data.expiryDate.split('T')[0] : ""
+          });
+        } catch (error) {
+          console.error("Error fetching form data:", error);
+          setStatus({ type: "error", message: "فشل في جلب بيانات النموذج" });
+        }
+      };
+
+      fetchFormData();
+    }
+  }, [isUpdate, taskId, user?.id, companyId]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setStatus({ type: "", message: "" }); // Clear previous status
+    setStatus({ type: "", message: "" });
+
     try {
-      // Prepare submission data
       const submissionData = {
-        email: formData.email,
-        pass: parseInt(formData.pass, 10) || 0, // Ensure pass is a number
-        officeLocation: formData.officeLocation,
+        ...formData,
+        pass: parseInt(formData.pass, 10) || 0,
         CreationDate: formData.CreationDate
           ? new Date(formData.CreationDate).toISOString()
           : null,
         expiryDate: formData.expiryDate
           ? new Date(formData.expiryDate).toISOString()
           : null,
-        employee: {
-          connect: { id: formData.empId ? parseInt(formData.empId, 10) : null }, // Connect to the existing employee
-        },
-        company: formData.compId
-          ? { connect: { id: parseInt(formData.compId, 10) } }
-          : undefined, // Connect to the existing company (if compId is provided)
-          task:formData.taskId ? { connect:{ id: parseInt(formData.taskId, 10)} } : undefined,
       };
-      console.log("Submission data:", submissionData);
 
-      // Submit form data to the backend
-      const response = await axios.post(
-        "http://145.223.96.50:3002/api/v1/vat",
-        submissionData
-      );
-      console.log("Form submission response:", response.data);
+      if (isUpdate) {
+        if (!formData.id) {
+          setStatus({ 
+            type: "error", 
+            message: "معرف السجل مفقود للتحديث" 
+          });
+          return;
+        }
 
-      // Show success message with "مكتمل"
-      setStatus({
-        type: "success",
-        message: "تم تسجيل تفاصيل التسجيل الضريبي بنجاح! (مكتمل)",
-      });
+        await axios.put(
+          `http://145.223.96.50:3002/api/v1/vat/${formData.id}`,
+          submissionData
+        );
+        setStatus({ type: "success", message: "تم تحديث البيانات بنجاح! (مكتمل)" });
+      } else {
+        await axios.post("http://145.223.96.50:3002/api/v1/vat", submissionData);
+        setStatus({ type: "success", message: "تم تسجيل تفاصيل التسجيل الضريبي بنجاح! (مكتمل)" });
+      }
 
-      // Navigate after short delay
-      setTimeout(() => {
-        navigate("/employee-dashboard");
-      }, 1500);
+      setTimeout(() => navigate("/employee-dashboard"), 1500);
     } catch (error) {
       console.error("Form submission error:", error);
-      console.error("Error details:", error.response?.data || error.message);
       setStatus({
         type: "error",
         message:
@@ -93,8 +112,10 @@ const VATForm = () => {
 
   const resetForm = () => {
     setFormData({
-      empId: employeeId, // Keep empId from logged-in user
-      compId: companyId || "", // Reset companyId to the one received from task
+      id: "",
+      empId: user?.id || "",
+      compId: companyId || "",
+      taskId: taskId || "",
       email: "",
       pass: "",
       officeLocation: "",
@@ -130,10 +151,11 @@ const VATForm = () => {
             required
           />
         </div>
+
         <div>
           <label className="block text-sm font-medium mb-1">الباسورد</label>
           <input
-            type="number" // Ensure pass is treated as a number
+            type="password"
             name="pass"
             value={formData.pass}
             onChange={handleChange}
@@ -141,6 +163,7 @@ const VATForm = () => {
             required
           />
         </div>
+
         <div>
           <label className="block text-sm font-medium mb-1">مأمورية</label>
           <input
@@ -152,6 +175,7 @@ const VATForm = () => {
             required
           />
         </div>
+
         <div>
           <label className="block text-sm font-medium mb-1">بداية الشهادة</label>
           <input
@@ -163,6 +187,7 @@ const VATForm = () => {
             required
           />
         </div>
+
         <div>
           <label className="block text-sm font-medium mb-1">نهاية الشهادة</label>
           <input
@@ -173,7 +198,12 @@ const VATForm = () => {
             className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
           />
         </div>
+
+        <input type="hidden" name="id" value={formData.id} />
         <input type="hidden" name="empId" value={formData.empId} />
+        <input type="hidden" name="compId" value={formData.compId} />
+        <input type="hidden" name="taskId" value={formData.taskId} />
+
         <div className="flex justify-end space-x-4">
           <button
             type="button"
@@ -186,7 +216,7 @@ const VATForm = () => {
             type="submit"
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none"
           >
-            إرسال
+            {isUpdate ? "تحديث" : "إرسال"}
           </button>
         </div>
       </form>

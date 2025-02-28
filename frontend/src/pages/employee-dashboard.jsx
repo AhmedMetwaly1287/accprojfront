@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/authContext";
 
-const TaskList = ({ tasks, handleTaskClick, handleCompleteTask }) => (
+const TaskList = ({ tasks, handleTaskClick, handleCompleteTask, handleUpdateTask }) => (
   <div className="space-y-4">
     {tasks.length === 0 ? (
       <p className="text-center text-gray-600">لا توجد مهام حتى الآن.</p>
@@ -32,6 +32,18 @@ const TaskList = ({ tasks, handleTaskClick, handleCompleteTask }) => (
                   ? "قيد التنفيذ"
                   : "مكتمل"}
               </span>
+
+              {/* Update button - only visible for COMPLETED tasks */}
+              {task.status === "COMPLETED" && (
+                <button
+                  onClick={() => handleUpdateTask(task)}
+                  className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 transition"
+                >
+                  تحديث البيانات
+                </button>
+              )}
+
+              {/* Complete task buttons - only visible for non-completed tasks */}
               {task.status !== "COMPLETED" && (
                 <>
                   <button
@@ -121,10 +133,9 @@ const EmployeeDashboard = () => {
       return false;
     }
   };
+
   const handleCompleteTask = async (taskId) => {
-    setError(null); // Clear any previous errors
-    
-    // Check if task data exists
+    setError(null);
     const taskDataExists = await checkTaskDataExists(taskId);
 
     if (!taskDataExists) {
@@ -132,36 +143,79 @@ const EmployeeDashboard = () => {
       return;
     }
 
-    // Proceed with task completion
     setSelectedTaskId(taskId);
     setShowConfirmationModal(true);
   };
 
   const confirmTaskCompletion = async () => {
     if (!selectedTaskId) return;
-
+  
     try {
       await axios.put(`http://145.223.96.50:3002/api/v1/tasks/${selectedTaskId}`, {
         status: "COMPLETED",
       });
-
+  
+      const task = tasks.find((t) => t.id === selectedTaskId);
+  
+      if (task) {
+        // تصحيح مسارات API
+        let formEndpoint = "";
+        switch (task.type) {
+          case "ض.ق.م":
+            formEndpoint = "vat";
+            break;
+          case "السجل التجاري":
+            formEndpoint = "commercial-registers";  // تصحيح
+            break;
+          case "ف.ك":
+            formEndpoint = "electronic-bills";      // تصحيح
+            break;
+          case "ض.ع":
+            formEndpoint = "public-tax";
+            break;
+          case "م.ت":
+            formEndpoint = "manifesto";
+            break;
+          default:
+            formEndpoint = "other";
+        }
+  
+        console.log(`Fetching form data from: /api/v1/${formEndpoint}/by-task/${selectedTaskId}`);
+  
+        const formResponse = await axios.get(
+          `http://145.223.96.50:3002/api/v1/${formEndpoint}/by-task/${selectedTaskId}`
+        );
+  
+        if (formResponse.data && formResponse.data.data) {
+          const formData = formResponse.data.data;
+          await axios.put(`http://145.223.96.50:3002/api/v1/${formEndpoint}/${formData.id}`, {
+            ...formData,
+            isCompleted: true,
+            completedAt: new Date().toISOString(),
+            completedBy: user.id,
+          });
+        }
+      }
+  
       setTasks((prevTasks) =>
         prevTasks.map((task) =>
           task.id === selectedTaskId ? { ...task, status: "COMPLETED" } : task
         )
       );
-
+  
       setShowConfirmationModal(false);
       setSelectedTaskId(null);
     } catch (error) {
-      setError("فشل تحديث حالة المهمة. حاول مرة أخرى لاحقًا.");
+      console.error("Error completing task:", error);
+      setError(`فشل تحديث حالة المهمة أو بيانات النموذج: ${error.message}`);
     }
   };
 
   const handleTaskClick = (task) => {
     if (!user?.id) return;
 
-    // Determine the form route based on the task type
+    console.log('Task being handled:', task);
+    
     let formRoute = "/";
     switch (task.type) {
       case "ض.ق.م":
@@ -176,21 +230,60 @@ const EmployeeDashboard = () => {
       case "ض.ع":
         formRoute = "/public-tax";
         break;
+      case "م.ت":
+        formRoute = "/manifesto";
+        break;
       default:
-        formRoute = "/other-form"; // Route to the new form for other types
+        formRoute = "/other-form";
     }
 
-    // Pass taskId, employeeId, and companyId to the form
-    navigate(formRoute, {
-      state: {
-        taskId: task.id,
-        employeeId: user.id,
-        companyId: task.companyId,
-      },
-    });
+    const navigationState = {
+      taskId: parseInt(task.id, 10),
+      companyId: parseInt(task.companyId, 10),
+      isUpdate: false
+    };
+
+    console.log('Navigation state:', navigationState);
+    navigate(formRoute, { state: navigationState });
   };
 
-  // Sort tasks: PENDING first, then COMPLETED
+  const handleUpdateTask = (task) => {
+    if (!user?.id) return;
+
+    console.log('Task being updated:', task);
+    
+    let formRoute = "/";
+    switch (task.type) {
+      case "ض.ق.م":
+        formRoute = "/vat";
+        break;
+      case "السجل التجاري":
+        formRoute = "/commercial-register";
+        break;
+      case "ف.ك":
+        formRoute = "/electronic-bill";
+        break;
+      case "ض.ع":
+        formRoute = "/public-tax";
+        break;
+      case "م.ت":
+        formRoute = "/manifesto";
+        break;
+      default:
+        formRoute = "/other-form";
+    }
+
+    const navigationState = {
+      taskId: parseInt(task.id, 10),
+      companyId: parseInt(task.companyId, 10),
+      isUpdate: true,
+      formId: parseInt(task.id, 10)
+    };
+
+    console.log('Navigation state:', navigationState);
+    navigate(formRoute, { state: navigationState });
+  };
+
   const sortedTasks = tasks.sort((a, b) => {
     if (a.status === "PENDING" && b.status !== "PENDING") return -1;
     if (a.status !== "PENDING" && b.status === "PENDING") return 1;
@@ -201,23 +294,18 @@ const EmployeeDashboard = () => {
     return <p className="text-center text-gray-600">جاري تحميل البيانات...</p>;
   }
 
-  if (error) {
-    return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="mb-6 p-4 bg-red-100 text-red-700 rounded">{error}</div>
-        <TaskList tasks={sortedTasks} handleTaskClick={handleTaskClick} handleCompleteTask={handleCompleteTask} />
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto p-6">
       {error && <div className="mb-6 p-4 bg-red-100 text-red-700 rounded">{error}</div>}
       <div className="mb-6 p-4 bg-yellow-100 text-yellow-700 rounded">
         لديك {tasks.filter((t) => t.status === "PENDING").length} مهام قيد الانتظار تحتاج إلى انتباهك.
       </div>
-      <TaskList tasks={sortedTasks} handleTaskClick={handleTaskClick} handleCompleteTask={handleCompleteTask} />
-      {/* Confirmation Modal */}
+      <TaskList
+        tasks={sortedTasks}
+        handleTaskClick={handleTaskClick}
+        handleCompleteTask={handleCompleteTask}
+        handleUpdateTask={handleUpdateTask}
+      />
       {showConfirmationModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">

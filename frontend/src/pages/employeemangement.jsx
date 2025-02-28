@@ -1,11 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import RecentTasks from './recenttasks'; // Import the RecentTasks component
 
 const EmployeeManagement = () => {
   const [employees, setEmployees] = useState([]);
-  const [tasks, setTasks] = useState([]);
   const [showAddEmployee, setShowAddEmployee] = useState(false);
+  const [showEditEmployee, setShowEditEmployee] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [newEmployee, setNewEmployee] = useState({
+    name: '',
+    phonenum: '',
+    email: '',
+    username: '',
+    password: '',
+    role_id: 1,
+  });
+  const [editEmployee, setEditEmployee] = useState({
+    id: null,
     name: '',
     phonenum: '',
     email: '',
@@ -19,13 +30,6 @@ const EmployeeManagement = () => {
   useEffect(() => {
     fetchEmployees();
   }, []);
-
-  // Fetch tasks when employees are loaded
-  useEffect(() => {
-    if (employees.length > 0) {
-      fetchTasks();
-    }
-  }, [employees]);
 
   // Fetch employees from the API
   const fetchEmployees = async () => {
@@ -43,105 +47,11 @@ const EmployeeManagement = () => {
     }
   };
 
-  // Fetch tasks and associated form data
-  const fetchTasks = async () => {
-    try {
-      const response = await axios.get('http://145.223.96.50:3002/api/v1/tasks');
-      if (response.data && Array.isArray(response.data.data)) {
-        // Sort tasks by createdAt descending
-        const sortedTasks = response.data.data.sort(
-          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-        );
-
-        const tasksWithDetails = await Promise.all(
-          sortedTasks.map(async (task) => {
-            const employee = employees.find((emp) => emp.id === task.employeeId);
-            let formData = null;
-
-            try {
-              // Define the mapping between task type and API endpoint
-              const endpointMap = {
-                vat: 'vat',
-                publictax: 'public-tax',
-                electronicbill: 'electronic-bills',
-                commercialregister: 'commercial-registers',
-              };
-
-              if (endpointMap[task.type]) {
-                const formResponse = await axios.get(
-                  `http://145.223.96.50:3002/api/v1/${endpointMap[task.type]}`,
-                  {
-                    params: {
-                      empId: task.employeeId,
-                      compId: task.companyId,
-                      taskId: task.taskId, // Include taskId in the request
-                    },
-                  }
-                );
-                // Check if the API response wraps the data in a nested property
-                formData = formResponse.data.data
-                  ? formResponse.data.data
-                  : formResponse.data;
-
-                // Debug log to verify formData
-                console.log(`Task ID ${task.id} formData:`, formData);
-              }
-            } catch (error) {
-              console.error('Error fetching form data for Task ID:', task.id, error);
-            }
-
-            // Determine form creation date and duration
-            let duration = null;
-            let formCreationDate = null;
-            if (formData) {
-              if (Array.isArray(formData)) {
-                if (formData.length > 0) {
-                  formCreationDate = formData[0].createdAt;
-                }
-              } else if (formData.createdAt) {
-                formCreationDate = formData.createdAt;
-              }
-            }
-            if (task.createdAt && formCreationDate) {
-              const taskCreatedAt = new Date(task.createdAt);
-              const formCreatedAt = new Date(formCreationDate);
-              duration = Math.abs((formCreatedAt - taskCreatedAt) / 1000 / 60).toFixed(2) + ' دقائق';
-            }
-
-            return {
-              ...task,
-              employeeName: employee ? employee.name : 'غير معروف',
-              displayType:
-                task.type === 'vat'
-                  ? 'ض.ق.م'
-                  : task.type === 'publictax'
-                  ? 'ضريبة عامة'
-                  : task.type === 'electronicbill'
-                  ? 'فاتورة إلكترونية'
-                  : task.type === 'commercialregister'
-                  ? 'سجل تجاري'
-                  : task.type,
-              formData,         // The raw form data
-              formCreationDate, // The form's createdAt timestamp (if available)
-              duration,         // The calculated duration in minutes
-            };
-          })
-        );
-
-        setTasks(tasksWithDetails);
-      }
-    } catch (error) {
-      console.error('Error fetching tasks:', error);
-      setTasks([]);
-    }
-  };
-
   // Handle adding a new employee
   const handleAddEmployee = async (e) => {
     e.preventDefault();
     setError('');
 
-    // Basic validation
     if (
       !newEmployee.name ||
       !newEmployee.phonenum ||
@@ -153,7 +63,6 @@ const EmployeeManagement = () => {
       return;
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newEmployee.email)) {
       setError('البريد الإلكتروني غير صحيح');
@@ -178,33 +87,69 @@ const EmployeeManagement = () => {
     }
   };
 
-  // Handle removing an employee
-  const handleRemoveEmployee = async (employeeId) => {
+  // Handle edit employee button click
+  const handleEditClick = (employee) => {
+    setSelectedEmployee(employee);
+    setEditEmployee({
+      id: employee.id,
+      name: employee.name,
+      phonenum: employee.phonenum,
+      email: employee.email,
+      username: employee.username,
+      password: '', // Clear password field for security
+      role_id: employee.role_id,
+    });
+    setShowEditEmployee(true);
+    setShowAddEmployee(false); // Close add form if open
+  };
+
+  // Handle updating an employee
+  const handleUpdateEmployee = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (
+      !editEmployee.name ||
+      !editEmployee.phonenum ||
+      !editEmployee.email ||
+      !editEmployee.username
+    ) {
+      setError('يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(editEmployee.email)) {
+      setError('البريد الإلكتروني غير صحيح');
+      return;
+    }
+
     try {
-      await axios.delete(`http://145.223.96.50:3002/api/v1/employees/${employeeId}`);
+      const updatePayload = { ...editEmployee };
+      if (!updatePayload.password) {
+        delete updatePayload.password;
+      }
+
+      await axios.put(`http://145.223.96.50:3002/api/v1/employees/${editEmployee.id}`, updatePayload);
       fetchEmployees();
+      setShowEditEmployee(false);
+      setSelectedEmployee(null);
     } catch (error) {
-      console.error('Error removing employee:', error);
+      console.error('Error updating employee:', error);
+      setError(error.response?.data?.message || 'حدث خطأ غير متوقع');
     }
   };
 
-  // Format date in a readable format
-  const formatDate = (dateString) => {
-    if (!dateString) return 'غير متوفر';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true,
-      });
-    } catch (e) {
-      console.error('Error formatting date:', e);
-      return 'تنسيق غير صالح';
+  // Handle removing an employee
+  const handleRemoveEmployee = async (employeeId) => {
+    if (window.confirm('هل أنت متأكد من حذف هذا الموظف؟')) {
+      try {
+        await axios.delete(`http://145.223.96.50:3002/api/v1/employees/${employeeId}`);
+        fetchEmployees();
+      } catch (error) {
+        console.error('Error removing employee:', error);
+        setError('فشل في حذف الموظف. يرجى المحاولة مرة أخرى.');
+      }
     }
   };
 
@@ -214,145 +159,276 @@ const EmployeeManagement = () => {
       <div className="bg-white shadow-md rounded-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold">إدارة الموظفين</h2>
-          <button
-            onClick={() => setShowAddEmployee(!showAddEmployee)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none"
-          >
-            {showAddEmployee ? 'إلغاء' : 'إضافة موظف'}
-          </button>
-        </div>
-
-        {showAddEmployee && (
-          <form onSubmit={handleAddEmployee} className="space-y-4 mb-6">
-            {error && (
-              <div
-                className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
-                role="alert"
-              >
-                {error}
-              </div>
-            )}
-
-            <input
-              type="text"
-              placeholder="الاسم الكامل"
-              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-right"
-              value={newEmployee.name}
-              onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
-              required
-            />
-            <input
-              type="tel"
-              placeholder="رقم الجوال"
-              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-right"
-              value={newEmployee.phonenum}
-              onChange={(e) => setNewEmployee({ ...newEmployee, phonenum: e.target.value })}
-              required
-            />
-            <input
-              type="email"
-              placeholder="البريد الإلكتروني"
-              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-right"
-              value={newEmployee.email}
-              onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
-              required
-            />
-            <input
-              type="text"
-              placeholder="اسم المستخدم"
-              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-right"
-              value={newEmployee.username}
-              onChange={(e) => setNewEmployee({ ...newEmployee, username: e.target.value })}
-              required
-            />
-            <input
-              type="password"
-              placeholder="كلمة المرور"
-              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-right"
-              value={newEmployee.password}
-              onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })}
-              required
-            />
-            <select
-              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-right"
-              value={newEmployee.role_id}
-              onChange={(e) =>
-                setNewEmployee({ ...newEmployee, role_id: parseInt(e.target.value) })
-              }
-              required
-            >
-              <option value="1">مسئول</option>
-              <option value="2">موظف</option>
-            </select>
+          <div className="flex gap-2">
             <button
-              type="submit"
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none"
+              onClick={() => {
+                setShowAddEmployee(!showAddEmployee);
+                setShowEditEmployee(false);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none"
             >
-              إضافة الموظف
+              {showAddEmployee ? 'إلغاء' : 'إضافة موظف'}
             </button>
-          </form>
-        )}
-
-        {/* Employee List */}
-        <div className="grid gap-4">
-          {employees.map((employee) => (
-            <div key={employee.id} className="flex items-center justify-between p-4 border rounded">
-              <div>
-                <h3 className="font-semibold">{employee.name}</h3>
-                <p className="text-sm text-gray-600">الهوية: {employee.id}</p>
-                <p className="text-sm text-gray-600">الجوال: {employee.phonenum}</p>
-                <p className="text-sm text-gray-600">البريد الإلكتروني: {employee.email}</p>
-                <p className="text-sm text-gray-600">
-                  الدور: {employee.role_id === 1 ? 'مسئول' : 'موظف'}
-                </p>
-              </div>
-              <button
-                onClick={() => handleRemoveEmployee(employee.id)}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 focus:outline-none"
-              >
-                حذف
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent Tasks Section */}
-      <div className="bg-white shadow-md rounded-lg p-6">
-        <h2 className="text-2xl font-bold mb-6">المهام الحديثة</h2>
-        {tasks.length > 0 ? (
-          <div className="grid gap-4">
-            {tasks.map((task) => (
-              <div key={task.id} className="p-4 border rounded">
-                <h3 className="font-semibold">{task.displayType}</h3>
-                <p className="text-sm text-gray-600">المسؤول: {task.employeeName}</p>
-                <p className="text-sm text-gray-600">
-                  الحالة: {task.status || 'غير محدد'}
-                </p>
-                <p className="text-sm text-gray-600">
-                  تاريخ إنشاء المهمة: {formatDate(task.createdAt)}
-                </p>
-                {/* Display form data if available */}
-                {task.formData &&
-                  ((Array.isArray(task.formData) && task.formData.length > 0) ||
-                    (!Array.isArray(task.formData) && task.formData.createdAt)) && (
-                    <>
-                      <p className="text-sm text-gray-600">
-                        تاريخ إنشاء النموذج: {formatDate(task.formCreationDate)}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        المدة المستغرقة: {task.duration}
-                      </p>
-                    </>
-                  )}
-              </div>
-            ))}
+            <button
+              onClick={() => fetchEmployees()}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 focus:outline-none"
+            >
+              تحديث
+            </button>
           </div>
-        ) : (
-          <p className="text-center text-gray-500">لا توجد مهام حالياً</p>
+        </div>
+
+        {error && (
+          <div
+            className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
+            role="alert"
+          >
+            {error}
+            <button
+              className="absolute top-0 bottom-0 right-0 px-4 py-3"
+              onClick={() => setError('')}
+            >
+              <span className="text-xl">&times;</span>
+            </button>
+          </div>
         )}
+
+        {/* Add Employee Form */}
+{showAddEmployee && (
+  <form onSubmit={handleAddEmployee} className="bg-gray-50 p-4 rounded-lg mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label className="block text-gray-700 mb-2">الاسم</label>
+        <input
+          type="text"
+          value={newEmployee.name}
+          onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">رقم الهاتف</label>
+        <input
+          type="text"
+          value={newEmployee.phonenum}
+          onChange={(e) => setNewEmployee({ ...newEmployee, phonenum: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">البريد الإلكتروني</label>
+        <input
+          type="email"
+          value={newEmployee.email}
+          onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">اسم المستخدم</label>
+        <input
+          type="text"
+          value={newEmployee.username}
+          onChange={(e) => setNewEmployee({ ...newEmployee, username: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">كلمة المرور</label>
+        <input
+          type="password"
+          value={newEmployee.password}
+          onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">الدور</label>
+        <select
+          value={newEmployee.role_id}
+          onChange={(e) => setNewEmployee({ ...newEmployee, role_id: parseInt(e.target.value) })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value={1}>مدير</option>
+          <option value={2}>موظف</option>
+        </select>
       </div>
     </div>
+    <div className="flex justify-end">
+      <button
+        type="submit"
+        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none"
+      >
+        إضافة
+      </button>
+    </div>
+  </form>
+)}
+
+{/* Edit Employee Form */}
+{showEditEmployee && selectedEmployee && (
+  <form onSubmit={handleUpdateEmployee} className="bg-gray-50 p-4 rounded-lg mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label className="block text-gray-700 mb-2">الاسم</label>
+        <input
+          type="text"
+          value={editEmployee.name}
+          onChange={(e) => setEditEmployee({ ...editEmployee, name: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">رقم الهاتف</label>
+        <input
+          type="text"
+          value={editEmployee.phonenum}
+          onChange={(e) => setEditEmployee({ ...editEmployee, phonenum: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">البريد الإلكتروني</label>
+        <input
+          type="email"
+          value={editEmployee.email}
+          onChange={(e) => setEditEmployee({ ...editEmployee, email: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">اسم المستخدم</label>
+        <input
+          type="text"
+          value={editEmployee.username}
+          onChange={(e) => setEditEmployee({ ...editEmployee, username: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">كلمة المرور (اتركها فارغة للاحتفاظ بالحالية)</label>
+        <input
+          type="password"
+          value={editEmployee.password}
+          onChange={(e) => setEditEmployee({ ...editEmployee, password: e.target.value })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 mb-2">الدور</label>
+        <select
+          value={editEmployee.role_id}
+          onChange={(e) => setEditEmployee({ ...editEmployee, role_id: parseInt(e.target.value) })}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value={1}>مدير</option>
+          <option value={2}>موظف</option>
+        </select>
+      </div>
+    </div>
+    <div className="flex justify-end">
+      <button
+        type="button"
+        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 focus:outline-none mr-2"
+        onClick={() => {
+          setShowEditEmployee(false);
+          setSelectedEmployee(null);
+        }}
+      >
+        إلغاء
+      </button>
+      <button
+        type="submit"
+        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none"
+      >
+        تحديث
+      </button>
+    </div>
+  </form>
+)}
+
+{/* Employees Table */}
+<div className="overflow-x-auto">
+  <table className="min-w-full bg-white border rounded-lg">
+    <thead>
+      <tr className="bg-gray-100 border-b">
+        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+          الاسم
+        </th>
+        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+          رقم الهاتف
+        </th>
+        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+          البريد الإلكتروني
+        </th>
+        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+          اسم المستخدم
+        </th>
+        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+          الدور
+        </th>
+        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+          الإجراءات
+        </th>
+      </tr>
+    </thead>
+    <tbody className="divide-y divide-gray-200">
+      {employees.length > 0 ? (
+        employees.map((employee) => (
+          <tr key={employee.id} className="hover:bg-gray-50">
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+              {employee.name}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {employee.phonenum}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {employee.email}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {employee.username}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {employee.role_id === 1 ? 'مدير' : 'موظف'}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <button
+                onClick={() => handleEditClick(employee)}
+                className="text-blue-600 hover:text-blue-900 ml-3"
+              >
+                تعديل
+              </button>
+              {employee.role_id === 2 && (
+                <button
+                  onClick={() => handleRemoveEmployee(employee.id)}
+                  className="text-red-600 hover:text-red-900"
+                >
+                  حذف
+                </button>
+              )}
+            </td>
+          </tr>
+        ))
+      ) : (
+        <tr>
+          <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+            لا يوجد موظفين
+          </td>
+        </tr>
+      )}
+    </tbody>
+  </table>
+</div>
+
+{/* Recent Tasks Section */}
+<div className="mt-8">
+  <RecentTasks 
+    employees={employees.filter(employee => employee.role_id === 2)}
+    reassignEmployees={employees.filter(employee => employee.role_id === 2)}
+  />
+</div>
+</div>
+</div>
   );
 };
 

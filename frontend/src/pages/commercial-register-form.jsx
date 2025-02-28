@@ -1,25 +1,21 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "../context/authContext";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const CommercialRegisterForm = () => {
   const { user } = useAuth();
-  const location = useLocation(); // Get location state for companyId
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Log the location state to debug
-  useEffect(() => {
-    console.log("Location state:", location.state);
-  }, [location.state]);
-
-  const employeeId = location.state?.employeeId || user?.id; // Get employeeId from logged-in user or location state
-  const companyId = location.state?.companyId; // Retrieve companyId from location.state
   const taskId = location.state?.taskId;
+  const companyId = location.state?.companyId;
+  const isUpdate = location.state?.isUpdate || false;
 
   const [formData, setFormData] = useState({
-    empId: employeeId || "", // Include employeeId in formData
-    compId: companyId || "", // Add companyId if available
+    id: "",
+    empId: user?.id || "",
+    compId: companyId || "",
     taskId: taskId || "",
     compName: "",
     legalEntity: "",
@@ -33,18 +29,45 @@ const CommercialRegisterForm = () => {
 
   const [status, setStatus] = useState({ type: "", message: "" });
 
+  useEffect(() => {
+    if (isUpdate && taskId) {
+      const fetchFormData = async () => {
+        try {
+          const response = await axios.get(
+            `http://145.223.96.50:3002/api/v1/commercial-registers/by-task/${taskId}`
+          );
+          const data = response.data.data ? response.data.data : response.data;
+          
+          const recordId = data.id || data._id;
+          
+          setFormData({
+            ...data,
+            id: recordId,
+            empId: user?.id || "",
+            compId: companyId || "",
+            taskId: taskId || "",
+            CreationDate: data.CreationDate ? data.CreationDate.split('T')[0] : "",
+            expiryDate: data.expiryDate ? data.expiryDate.split('T')[0] : ""
+          });
+        } catch (error) {
+          console.error("Error fetching form data:", error);
+          setStatus({ type: "error", message: "فشل في جلب بيانات النموذج" });
+        }
+      };
+
+      fetchFormData();
+    }
+  }, [isUpdate, taskId, user?.id, companyId]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setStatus({ type: "", message: "" }); // Clear previous status
+    setStatus({ type: "", message: "" });
 
     try {
-      // Prepare the data for the backend
-      const backendData = {
+      const submissionData = {
         ...formData,
-        compId: formData.compId ? parseInt(formData.compId, 10) : null, // Send companyId if available
-        taskId: formData.taskId ? parseInt(formData.taskId, 10) : null,
-        numCommRegister: parseInt(formData.numCommRegister, 10) || 0, // Ensure numCommRegister is a number
-        qcomp: parseInt(formData.qcomp, 10) || 0, // Ensure qcomp is a number
+        numCommRegister: parseInt(formData.numCommRegister, 10) || 0,
+        qcomp: parseInt(formData.qcomp, 10) || 0,
         CreationDate: formData.CreationDate
           ? new Date(formData.CreationDate).toISOString()
           : null,
@@ -52,20 +75,33 @@ const CommercialRegisterForm = () => {
           ? new Date(formData.expiryDate).toISOString()
           : null,
       };
-      console.log("Data being sent to backend:", backendData); // Debugging log
 
-      // Submit form data to the backend
-      await axios.post("http://145.223.96.50:3002/api/v1/commercial-registers", backendData);
+      if (isUpdate) {
+        if (!formData.id) {
+          setStatus({ 
+            type: "error", 
+            message: "معرف السجل مفقود للتحديث" 
+          });
+          return;
+        }
 
-      // Show success message and redirect to the employee dashboard
-      setStatus({ type: "success", message: "تم إرسال تفاصيل السجل التجاري بنجاح!" });
+        await axios.put(
+          `http://145.223.96.50:3002/api/v1/commercial-registers/${formData.id}`,
+          submissionData
+        );
+        setStatus({ type: "success", message: "تم تحديث البيانات بنجاح! (مكتمل)" });
+      } else {
+        await axios.post("http://145.223.96.50:3002/api/v1/commercial-registers", submissionData);
+        setStatus({ type: "success", message: "تم تسجيل السجل التجاري بنجاح! (مكتمل)" });
+      }
+
       setTimeout(() => navigate("/employee-dashboard"), 1500);
     } catch (error) {
-      // Log the error and show an error message
-      console.error("Error submitting form:", error);
+      console.error("Form submission error:", error);
       setStatus({
         type: "error",
-        message: "فشل في إرسال النموذج. يرجى المحاولة مرة أخرى.",
+        message:
+          error.response?.data?.message || "فشل إرسال النموذج. يرجى المحاولة مرة أخرى.",
       });
     }
   };
@@ -74,9 +110,26 @@ const CommercialRegisterForm = () => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
-      [name]:
-        ["numCommRegister", "qcomp"].includes(name) ? parseInt(value, 10) || "" : value,
+      [name]: value,
     });
+  };
+
+  const resetForm = () => {
+    setFormData({
+      id: "",
+      empId: user?.id || "",
+      compId: companyId || "",
+      taskId: taskId || "",
+      compName: "",
+      legalEntity: "",
+      numCommRegister: "",
+      activites: "",
+      location: "",
+      qcomp: "",
+      CreationDate: "",
+      expiryDate: "",
+    });
+    setStatus({ type: "", message: "" });
   };
 
   return (
@@ -94,9 +147,6 @@ const CommercialRegisterForm = () => {
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Hidden input for employee ID */}
-        <input type="hidden" name="empId" value={formData.empId} />
-
         <div>
           <label className="block text-sm font-medium mb-1">اسم الشركة</label>
           <input
@@ -104,7 +154,7 @@ const CommercialRegisterForm = () => {
             name="compName"
             value={formData.compName}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
             required
           />
         </div>
@@ -116,7 +166,7 @@ const CommercialRegisterForm = () => {
             name="legalEntity"
             value={formData.legalEntity}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
             required
           />
         </div>
@@ -128,30 +178,31 @@ const CommercialRegisterForm = () => {
             name="numCommRegister"
             value={formData.numCommRegister}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
             required
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium mb-1">الأنشطة</label>
-          <textarea
+          <input
+            type="text"
             name="activites"
             value={formData.activites}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
             required
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">مكان التأسيس</label>
+          <label className="block text-sm font-medium mb-1">الموقع</label>
           <input
             type="text"
             name="location"
             value={formData.location}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
             required
           />
         </div>
@@ -159,11 +210,11 @@ const CommercialRegisterForm = () => {
         <div>
           <label className="block text-sm font-medium mb-1">ق.الشركة</label>
           <input
-            type="text"
+            type="number"
             name="qcomp"
             value={formData.qcomp}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
             required
           />
         </div>
@@ -175,7 +226,7 @@ const CommercialRegisterForm = () => {
             name="CreationDate"
             value={formData.CreationDate}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
             required
           />
         </div>
@@ -187,16 +238,28 @@ const CommercialRegisterForm = () => {
             name="expiryDate"
             value={formData.expiryDate}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
           />
         </div>
 
+        <input type="hidden" name="id" value={formData.id} />
+        <input type="hidden" name="empId" value={formData.empId} />
+        <input type="hidden" name="compId" value={formData.compId} />
+        <input type="hidden" name="taskId" value={formData.taskId} />
+
         <div className="flex justify-end space-x-4">
           <button
-            type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            type="button"
+            onClick={resetForm}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 focus:outline-none"
           >
-            إرسال
+            إعادة تعيين
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none"
+          >
+            {isUpdate ? "تحديث" : "إرسال"}
           </button>
         </div>
       </form>
