@@ -36,7 +36,9 @@ const RecentTasks = () => {
     try {
       const response = await axios.get('http://145.223.96.50:3002/api/v1/employees');
       if (Array.isArray(response.data.data)) {
-        setEmployees(response.data.data);
+        // تصفية الموظفين للحصول فقط على من لديهم role_id يساوي 2
+        const filteredEmployees = response.data.data.filter(emp => emp.role_id === 2);
+        setEmployees(filteredEmployees);
       } else {
         console.error('Expected an array but got:', response.data);
         setEmployees([]);
@@ -541,6 +543,7 @@ const RecentTasks = () => {
                 value={selectedEmployeeId || ''}
                 onChange={(e) => setSelectedEmployeeId(parseInt(e.target.value))}
               >
+                <option value="">اختر موظف</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
                     {emp.name}
