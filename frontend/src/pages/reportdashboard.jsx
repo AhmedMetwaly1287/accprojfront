@@ -13,6 +13,7 @@ const ReportsDashboard = () => {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLocation, setSelectedLocation] = useState("");
+  const [activeReport, setActiveReport] = useState(""); // إضافة حالة للتقرير النشط
   const [dateRange, setDateRange] = useState({
     startDate: "",
     endDate: "",
@@ -1228,6 +1229,45 @@ const ReportsDashboard = () => {
     );
   };
 
+  // تحديث طريقة عرض التقارير الرئيسية
+  const renderMainReports = () => {
+    const filteredData = combinedFilter();
+    const reportButtons = [
+      { id: 'vat', title: 'تقرير ضريبة القيمة المضافة', data: filteredData.vat },
+      { id: 'publicTax', title: 'تقرير الضرائب العامة', data: filteredData.publicTax },
+      { id: 'commercialReg', title: 'تقرير السجل التجاري', data: filteredData.commercialReg },
+      { id: 'electronicBill', title: 'تقرير الفواتير الإلكترونية', data: filteredData.electronicBill },
+      { id: 'other', title: 'تقارير أخرى', data: filteredData.other }
+    ];
+
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <div className="flex flex-wrap gap-4 mb-6">
+          {reportButtons.map(report => (
+            <button
+              key={report.id}
+              onClick={() => setActiveReport(activeReport === report.id ? '' : report.id)}
+              className={`px-4 py-2 rounded-lg transition-all duration-200 ${
+                activeReport === report.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              }`}
+            >
+              {report.title}
+              <span className="mr-2 px-2 py-1 bg-white bg-opacity-20 rounded-full text-sm">
+                {report.data.length}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {activeReport && filteredData[activeReport]?.length > 0 && (
+          <ReportTable type={activeReport} data={filteredData[activeReport]} />
+        )}
+      </div>
+    );
+  };
+
   if (loading) {
     return <>جاري تحميل البيانات...</>;
   }
@@ -1289,9 +1329,7 @@ const ReportsDashboard = () => {
       </div>
 
       {/* عرض التقارير الرئيسية */}
-      {Object.entries(combinedFilter()).map(([type, data]) => (
-        data.length > 0 && <ReportTable key={type} type={type} data={data} />
-      ))}
+      {renderMainReports()}
 
       {/* تقارير اليوم */}
       <div className="bg-white p-6 rounded-lg shadow-md mb-6">
