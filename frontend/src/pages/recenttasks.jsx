@@ -63,10 +63,26 @@ const RecentTasks = () => {
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
         );
 
+        // جلب بيانات الشركات
+        const companiesResponse = await axios.get('http://145.223.96.50:3002/api/v1/companies');
+        const companies = companiesResponse.data || [];
+
         const tasksWithDetails = await Promise.all(
           sortedTasks.map(async (task) => {
             const employee = employees.find((emp) => emp.id === task.employeeId);
             let formData = null;
+
+            // البحث عن الشركة من خلال compId
+            const company = companies.find(c => c.id === (task.compId || task.companyId));
+            
+            // تحديد اسم العميل والشركة
+            let clientName = 'غير معروف';
+            let companyName = 'غير معروف';
+
+            if (company) {
+              clientName = company.clientName || company.name || 'غير معروف';
+              companyName = company.name || 'غير معروف';
+            }
 
             try {
               const endpointMap = {
@@ -82,6 +98,17 @@ const RecentTasks = () => {
                   `http://145.223.96.50:3002/api/v1/${endpointMap[task.type]}/by-task/${task.taskId}`
                 );
                 formData = formResponse.data.data ? formResponse.data.data : formResponse.data;
+
+                // إذا وجدنا بيانات النموذج، نحاول استخراج اسم العميل منها
+                if (formData) {
+                  const formClientName = Array.isArray(formData) 
+                    ? formData[0]?.clientName || formData[0]?.name
+                    : formData.clientName || formData.name;
+                  
+                  if (formClientName) {
+                    clientName = formClientName;
+                  }
+                }
               }
             } catch (error) {
               console.error('Error fetching form data for Task ID:', task.id, error);
@@ -103,6 +130,8 @@ const RecentTasks = () => {
 
             return {
               ...task,
+              clientName,
+              companyName,
               employeeName: employee ? employee.name : 'غير معروف',
               displayType:
                 task.type === 'vat'
@@ -618,7 +647,7 @@ const RecentTasks = () => {
                   المهمة
                 </th>
                 <th className="py-3 px-6 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  الشركة
+                  اسم العميل
                 </th>
                 <th className="py-3 px-6 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   المسؤول
@@ -641,7 +670,7 @@ const RecentTasks = () => {
                     {task.displayType}
                   </td>
                   <td className="py-4 px-6 text-sm text-gray-500">
-                    {task.companyName || task.companyId}
+                    {task.clientName}
                   </td>
                   <td className="py-4 px-6 text-sm text-gray-500">{task.employeeName}</td>
                   <td className="py-4 px-6 text-sm text-gray-500">
@@ -653,20 +682,12 @@ const RecentTasks = () => {
                   <td className="py-4 px-6 text-sm font-medium">
                     <div className="flex space-x-2 space-x-reverse">
                       {task.status !== 'COMPLETED' && (
-                        <>
-                          <button
-                            onClick={() => handleCompleteTask(task.id)}
-                            className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
-                          >
-                            إكمال
-                          </button>
-                          <button
-                            onClick={() => handleReassignClick(task)}
-                            className="px-3 py-1 bg-yellow-600 text-white rounded text-xs hover:bg-yellow-700"
-                          >
-                            إعادة تعيين
-                          </button>
-                        </>
+                        <button
+                          onClick={() => handleReassignClick(task)}
+                          className="px-3 py-1 bg-yellow-600 text-white rounded text-xs hover:bg-yellow-700"
+                        >
+                          إعادة تعيين
+                        </button>
                       )}
                       {task.formData && (
                         <button
@@ -674,14 +695,6 @@ const RecentTasks = () => {
                           className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
                         >
                           تعديل النموذج
-                        </button>
-                      )}
-                      {task.status === 'COMPLETED' && (
-                        <button
-                          onClick={() => handleUpdateRedirect(task)}
-                          className="px-3 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700"
-                        >
-                          تحديث
                         </button>
                       )}
                     </div>
