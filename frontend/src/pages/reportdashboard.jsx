@@ -854,7 +854,8 @@ const ReportsDashboard = () => {
   const handleExportEmployeeTasks = () => {
     if (selectedEmployee && tasks?.data) {
       const employeeTasks = tasks.data.filter(
-        task => String(task.employeeId) === String(selectedEmployee)
+        task => String(task.employeeId) === String(selectedEmployee) && 
+        task.status?.toUpperCase() === 'COMPLETED'
       );
       exportToExcel(employeeTasks, `تقرير_مهام_الموظف`, 'employeeTasks');
     }
